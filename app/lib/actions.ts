@@ -4,15 +4,22 @@ import { z } from 'zod'
 import postgres from 'postgres';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { error } from 'console';
 
 const sql = postgres( process.env.POSTGRES_URL!, {ssl: 'require'} );
 
 // Define the schema for invoice data
 const FormSchema = z.object({
     id: z.string(),
-    customerId: z.string(),
-    amount: z.coerce.number(),
-    status: z.enum(['pending', 'paid']),
+    customerId: z.string({
+        message: 'Please select a customer.',
+    }),
+    amount: z.coerce.number().gt(0, {
+        message: 'Please enter an amount greater than $0.',
+    }),
+    status: z.enum(['pending', 'paid'], {
+        message: 'Please select an invoice status.',
+    }),
     date: z.string(),
 })
 
@@ -23,7 +30,18 @@ const UpdateInvoice = FormSchema.omit({
     id:true
 });
 
+export type State = {
+    errors?: {
+        customerId?: string[];
+        amount?: string[];
+        status?: string[];
+        date?: string[];
+    },
+    message?: string | null,
+}
+
 export async function createInvoice(
+    prevState: State,
     formData: FormData
 ) {
     const invoiceData = Object.fromEntries(formData.entries());
@@ -38,20 +56,30 @@ export async function createInvoice(
     const parsedData = CreateInvoice.safeParse(invoiceData);
 
     if (!parsedData.success) {
-        console.error('Validation failed:', parsedData.error);
-        throw new Error('Invalid invoice data');
+        return {
+            errors: parsedData.error.flatten().fieldErrors,
+            message: 'Missing fields. Failed to create invoice.',
+        };
     }
 
     try {
 
-    await sql`
-        INSERT INTO invoices (customer_id, amount, status, date) VALUES (
-            ${parsedData.data.customerId}, ${parsedData.data.amount}, ${parsedData.data.status}, ${parsedData.data.date} )
-    `
+        await sql`
+            INSERT INTO invoices (customer_id, amount, status, date) VALUES (
+                ${parsedData.data.customerId}, ${parsedData.data.amount}, ${parsedData.data.status}, ${parsedData.data.date} )
+        `
 
     } catch (error) {
         console.error('SQL error:', error);
-        /* throw new Error('Failed to create invoice'); */
+        return {
+/*             errors: {
+                customerId: ['Database Error: Failed to create invoice.'],
+                amount: ['Database Error: Failed to create invoice.'],
+                status: ['Database Error: Failed to create invoice.'],
+                date: ['Database Error: Failed to create invoice.'],
+            }, */
+            message: 'Database Error: Failed to create invoice.',
+        }
     }
 
     // Revalidate the path to update the cache
@@ -65,7 +93,8 @@ export async function createInvoice(
 
 export async function updateInvoice(
     id: string,
-    formData: FormData
+    prevState: State,
+    formData: FormData,
 ) {
 
     const invoiceData = Object.fromEntries(formData.entries());
@@ -77,8 +106,10 @@ export async function updateInvoice(
     const parsedData = UpdateInvoice.safeParse(invoiceData);
 
     if (!parsedData.success) {
-        console.error('Validation failed:', parsedData.error);
-        throw new Error('Invalid invoice data');
+        return {
+            errors: parsedData.error.flatten().fieldErrors,
+            message: 'Invalid fields. Failed to update invoice.',
+        }
     }
 
     try {
@@ -93,8 +124,15 @@ export async function updateInvoice(
     `;
 
     } catch (error) {
-        console.error('SQL error:', error);
-        /* throw new Error('Failed to update invoice'); */
+        return {
+            errors: {
+                customerId: ['Database Error: Failed to update invoice.'],
+                amount: ['Database Error: Failed to update invoice.'],
+                status: ['Database Error: Failed to update invoice.'],
+                date: ['Database Error: Failed to update invoice.'],
+            },
+            message: 'Database Error: Failed to update invoice.',
+        }
     }
 
     revalidatePath(`/dashboard/invoices`);
