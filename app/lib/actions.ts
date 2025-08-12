@@ -42,10 +42,17 @@ export async function createInvoice(
         throw new Error('Invalid invoice data');
     }
 
+    try {
+
     await sql`
         INSERT INTO invoices (customer_id, amount, status, date) VALUES (
             ${parsedData.data.customerId}, ${parsedData.data.amount}, ${parsedData.data.status}, ${parsedData.data.date} )
     `
+
+    } catch (error) {
+        console.error('SQL error:', error);
+        /* throw new Error('Failed to create invoice'); */
+    }
 
     // Revalidate the path to update the cache
     // This will ensure that the invoices page reflects the newly created invoice
@@ -74,6 +81,8 @@ export async function updateInvoice(
         throw new Error('Invalid invoice data');
     }
 
+    try {
+
     await sql`
         UPDATE invoices SET 
             customer_id = ${parsedData.data.customerId}, 
@@ -83,15 +92,28 @@ export async function updateInvoice(
         WHERE id = ${id}
     `;
 
+    } catch (error) {
+        console.error('SQL error:', error);
+        /* throw new Error('Failed to update invoice'); */
+    }
+
     revalidatePath(`/dashboard/invoices`);
     redirect(`/dashboard/invoices`);
 
 }
 
 export async function deleteInvoice(id: string) {
+    
+    throw new Error('Not implemented delete invoice error handling');
+
+    try {
 
     await sql`DELETE FROM invoices WHERE id = ${id}`;
 
+    } catch (error) {
+        console.error('SQL error:', error);
+/*         throw new Error('Failed to delete invoice'); */
+    }
     revalidatePath('/dashboard/invoices');
 
 }
